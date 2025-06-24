@@ -31,6 +31,7 @@ mod executor;
 mod factory;
 mod patch;
 mod ffi_helper;
+mod customdb;
 
 /// BSC EVM implementation.
 ///

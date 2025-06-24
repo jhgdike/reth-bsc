@@ -64,8 +64,8 @@ pub fn create_bsc_block_executor<'a>(
     executor
 }
 
-pub fn batch_execute_transactions(
-    mut executor: BscBlockExecutor<BscEvm<&mut State<CacheDB<EmptyDB>>, NoOpInspector, PrecompilesMap>, Arc<BscChainSpec>, RethReceiptBuilder>,
+pub fn batch_execute_transactions<'a>(
+    mut executor: BscBlockExecutor<'a, BscEvm<&'a mut State<CacheDB<EmptyDB>>, NoOpInspector, PrecompilesMap>, Arc<BscChainSpec>, RethReceiptBuilder>,
     transactions : Vec<String>,
 ) {
 
@@ -128,15 +128,13 @@ pub fn creat_block_executor_and_run(
 }
 
 mod tests {
-    use alloy_consensus::{Header, TxLegacy};
-    use alloy_primitives::{Bytes, TxKind, U256};
+    use super::*;
+    use alloy_consensus::{TxLegacy};
+    use alloy_primitives::{hex, TxKind, U256};
     use alloy_rlp::Encodable;
     use reth::revm::db::StateBuilder;
     use reth_chainspec::EthChainSpec;
     use revm::database::InMemoryDB;
-    use crate::chainspec::bsc::bsc_mainnet;
-    use crate::node::evm::ffi_helper::{batch_execute_transactions, creat_block_executor_and_run};
-    use crate::node::evm::ffi_helper::create_bsc_block_executor;
 
     #[test]
     fn test_create_bsc_block_executor() {
@@ -146,7 +144,7 @@ mod tests {
         let mut db = StateBuilder::new_with_database(empty_db).build();
         let executor = create_bsc_block_executor(&mut db, &header);
         let tx = TxLegacy{
-            chain_id: Option::from(bsc_mainnet().chain_id()),
+            chain_id: Option::from(bsc::bsc_mainnet().chain_id()),
             nonce: 0,
             gas_price: 0,
             gas_limit: 3000000,
@@ -154,9 +152,10 @@ mod tests {
             value: U256::try_from(0).unwrap(),
             input: Bytes::default(),
         };
-        let mut buf = Vec::new();
+        let mut buf: Vec<u8> = Vec::new();
         tx.encode(&mut buf);
-        batch_execute_transactions(executor, vec![buf.to_string()]);
+        let hex_str = hex::encode(&buf);
+        batch_execute_transactions(executor, vec![hex_str]);
     }
 
     #[test]
@@ -166,7 +165,7 @@ mod tests {
         let empty_db = InMemoryDB::default();
         let mut db = StateBuilder::new_with_database(empty_db).build();
         let tx = TxLegacy{
-            chain_id: Option::from(bsc_mainnet().chain_id()),
+            chain_id: Option::from(bsc::bsc_mainnet().chain_id()),
             nonce: 0,
             gas_price: 0,
             gas_limit: 3000000,
@@ -176,6 +175,7 @@ mod tests {
         };
         let mut buf = Vec::new();
         tx.encode(&mut buf);
-        creat_block_executor_and_run(&mut db, &header, vec![buf.to_string()]);
+        let hex_str = hex::encode(&buf);
+        creat_block_executor_and_run(&mut db, &header, vec![hex_str]);
     }
 }

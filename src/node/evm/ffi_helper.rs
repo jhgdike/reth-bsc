@@ -25,7 +25,7 @@ use revm::Database;
 pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
     db: DB,
     header: & Header,
-    transactions : Vec<String>,
+    transactions : Vec<&str>,
 ) {
     // 1. 创建链规范
     let chain_spec = Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() });
@@ -60,7 +60,7 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
         system_contracts,
     );
 
-    for tx_bytes in &transactions {
+    for tx_bytes in transactions {
         let _tx_bytes = match Bytes::from_str(tx_bytes) {
             Ok(bytes) => bytes,
             Err(e) => {
@@ -109,31 +109,77 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
     use alloy_consensus::{TxLegacy};
-    use alloy_primitives::{hex, TxKind, U256};
+    use alloy_primitives::{hex, TxKind, U256, Address, Signature};
     use alloy_rlp::Encodable;
     use reth_chainspec::EthChainSpec;
     use revm::database::InMemoryDB;
+    use secp256k1::{SecretKey, Secp256k1};
+    use reth_primitives::{Transaction};
+    use std::str::FromStr;
 
     #[test]
     fn test_create_bsc_block_executor_and_run() {
-        let header = Header::default();
+        let mut header = Header::default();
 
+        header.gas_limit = 30000000;
+
+        // 创建交易
         let tx = TxLegacy{
             chain_id: Option::from(bsc::bsc_mainnet().chain_id()),
             nonce: 0,
-            gas_price: 0,
+            gas_price: u128::try_from(U256::from(20000000000u64)).unwrap(), // 20 Gwei
             gas_limit: 3000000,
-            to: TxKind::default(),
+            to: TxKind::Call(Address::from_str("0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6").unwrap()), // 发送到另一个地址
             value: U256::try_from(0).unwrap(),
             input: Bytes::default(),
         };
+
+        // 使用私钥签名交易
+        let private_key_hex = "a18e014010947d1639014caac07283b664e776c9e4b5556ab2e8c6502359c287";
+        let private_key_bytes = hex::decode(private_key_hex).unwrap();
+        let secret_key = SecretKey::from_slice(&private_key_bytes).unwrap();
+        
+        // 创建签名上下文
+        let secp = Secp256k1::new();
+        
+        // 编码交易用于签名
         let mut buf = Vec::new();
         tx.encode(&mut buf);
-        let hex_str = hex::encode(&buf);
+        
+        // 计算交易哈希
+        let tx_hash = alloy_primitives::keccak256(&buf);
+        
+        // 签名交易哈希
+        let message = secp256k1::Message::from_digest_slice(tx_hash.as_slice()).unwrap();
+        let signature = secp.sign_ecdsa(&message, &secret_key);
+        
+        // 创建签名对象
+        let signature_obj = Signature::new(
+            U256::from_be_slice(&signature.serialize_compact()[0..32]),
+            U256::from_be_slice(&signature.serialize_compact()[32..64]),
+            false,
+        );
+        
+        // 创建签名后的交易
+        let signed_tx = TransactionSigned::new_unhashed(
+            Transaction::Legacy(tx),
+            signature_obj,
+        );
+        
+        // 编码签名后的交易
+        let mut signed_buf = Vec::new();
+        signed_tx.encode(&mut signed_buf);
+        let hex_str = hex::encode(&signed_buf);
 
-        batch_run_txs(&mut InMemoryDB::default(), &header, vec![hex_str]);
+        println!("签名后的交易hex: {}", hex_str);
+        println!("发送者地址: 0xe4661eb2c39422d41056bdf629b446a2e514e9fc");
+        println!("接收者地址: 0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6");
+
+        batch_run_txs(&mut InMemoryDB::default(), &header, vec![&*hex_str]);
     }
+
 }

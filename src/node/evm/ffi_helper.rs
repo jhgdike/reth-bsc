@@ -26,7 +26,7 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
     db: DB,
     header: & Header,
     transactions : Vec<&str>,
-) {
+) -> u64 {
     // 1. 创建链规范
     let chain_spec = Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() });
 
@@ -60,6 +60,7 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
         system_contracts,
     );
 
+    let mut total_gas: u64 = 0;
     for tx_bytes in transactions {
         let _tx_bytes = match Bytes::from_str(tx_bytes) {
             Ok(bytes) => bytes,
@@ -103,10 +104,16 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
             },
         );
         match result {
-            Ok(gas_used) => println!("交易执行成功，消耗gas: {}", gas_used),
+            Ok(gas_used) => {
+                println!("交易执行成功，消耗gas: {}", gas_used);
+                total_gas += gas_used;
+            },
             Err(e) => println!("交易执行失败: {:?}", e),
         }
     }
+
+    println!("batch total gas_used: {}", total_gas);
+    total_gas
 }
 
 #[cfg(test)]

@@ -13,54 +13,40 @@ use alloy_consensus::{EthereumTxEnvelope, Header, TxEip4844};
 use alloy_evm::block::BlockExecutor;
 use alloy_evm::{EvmFactory};
 use alloy_primitives::{Bytes};
-use alloy_rlp::Decodable;
+use alloy_rlp::{Decodable, encode};
 use reth::revm::db::StateBuilder;
 use reth_evm_ethereum::RethReceiptBuilder;
 use crate::node::evm::executor::BscBlockExecutor;
 use reth_primitives::TransactionSigned;
 use reth_primitives_traits::SignerRecoverable;
 use revm::Database;
+use triehash::ordered_trie_root;
+use keccak_hasher::KeccakHasher;
+use std::ffi::CString;
+use std::os::raw::c_char;
+use std::time::{Duration, Instant, SystemTime};
+use alloy_consensus::transaction::Recovered;
+use hex;
+use once_cell::unsync::Lazy;
+
+static CHAIN_SPEC: Lazy<Arc<BscChainSpec> >= Lazy::new(||Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() }));
+static EVM_CONFIG: BscEvmConfig = BscEvmConfig::bsc(CHAIN_SPEC);
+static RECEIPT_BUILDER: RethReceiptBuilder = RethReceiptBuilder::default();
+
+// 6. 创建系统合约
+// static SYSTEM_CONTRACTS: SystemContract<Arc<BscChainSpec>> = SystemContract::new(CHAIN_SPEC);
+
+struct ABC {
+
+}
 
 /// 创建BscBlockExecutor的完整示例
 pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
     db: DB,
     header: & Header,
     transactions : Vec<&str>,
-) -> u64 {
-    // 1. 创建链规范
-    let chain_spec = Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() });
-
-    // 2. 创建EVM配置
-    let evm_config = BscEvmConfig::bsc(chain_spec.clone());
-
-    let mut db = StateBuilder::new_with_database(db).build();
-    // 3. 创建EVM实例
-    let evm = BscEvmFactory::default().create_evm(&mut db, evm_config.evm_env(header));
-
-    // 4. 创建执行上下文
-    let ctx = EthBlockExecutionCtx {
-        parent_hash: header.parent_hash,
-        parent_beacon_block_root: None,
-        ommers: &[],
-        withdrawals: None,
-    };
-
-    // 5. 创建收据构建器
-    let receipt_builder = RethReceiptBuilder::default();
-
-    // 6. 创建系统合约
-    let system_contracts = SystemContract::new(chain_spec.clone());
-
-    // 7. 创建BscBlockExecutor
-    let mut executor = BscBlockExecutor::new(
-        evm,
-        ctx,
-        chain_spec,
-        receipt_builder,
-        system_contracts,
-    );
-
-    let mut total_gas: u64 = 0;
+) -> (u64, [u8;32], *mut c_char) {
+    let mut rust_transactions: Vec<Recovered<TransactionSigned>> = vec![];
     for tx_bytes in transactions {
         let _tx_bytes = match Bytes::from_str(tx_bytes) {
             Ok(bytes) => bytes,
@@ -96,24 +82,91 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
                 continue;
             }
         };
+        rust_transactions.push(recovered);
 
+    }
+
+    let st = Instant::now();
+    // let mut total_real = Duration::new(0, 0);
+    // // 1. 创建链规范
+    // let CHAIN_SPEC = Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() });
+    //
+    // // 2. 创建EVM配置
+    // let EVM_CONFIG = BscEvmConfig::bsc(CHAIN_SPEC.clone());
+
+    let mut db = StateBuilder::new_with_database(db).build();
+    // 3. 创建EVM实例
+    let evm = BscEvmFactory::default().create_evm(&mut db, EVM_CONFIG.evm_env(header));
+
+    // 4. 创建执行上下文
+    let ctx = EthBlockExecutionCtx {
+        parent_hash: header.parent_hash,
+        parent_beacon_block_root: None,
+        ommers: &[],
+        withdrawals: None,
+    };
+
+    // 7. 创建BscBlockExecutor
+    let mut executor = BscBlockExecutor::new(
+        evm,
+        ctx,
+        CHAIN_SPEC.clone(),
+        RECEIPT_BUILDER,
+        SystemContract::new(CHAIN_SPEC.clone()),
+    );
+
+    let st_txs_time = Instant::now();
+    // let mut total_gas: u64 = 0;
+
+
+    // let pure_time = Instant::now();
+    for recovered in rust_transactions {
+
+        // let syst = SystemTime::now();
         let result = executor.execute_transaction_with_result_closure(
             &recovered,
             |result| {
-                println!("交易执行结果: {:?}", result);
+                // println!("交易执行结果: {:?}", result);
+                // total_real += syst.elapsed().unwrap();
             },
         );
         match result {
             Ok(gas_used) => {
-                println!("交易执行成功，消耗gas: {}", gas_used);
-                total_gas += gas_used;
+                // println!("交易执行成功，消耗gas: {}", gas_used);
+                // total_gas += gas_used;
             },
             Err(e) => println!("交易执行失败: {:?}", e),
         }
     }
 
-    println!("batch total gas_used: {}", total_gas);
-    total_gas
+    // println!("batch total gas_used: {}", total_gas);
+
+    // Finish executor to get receipts and compute root
+    let (_evm, exec_result) = executor.finish().expect("executor finish failed");
+
+    println!("whole batch_run_txs time: {:?}, txs time: {:?}", st.elapsed(), st_txs_time.elapsed());
+    // let receipts = exec_result.receipts;
+    //
+    // // 为计算 root，单独编码每个 receipt
+    // use alloy_rlp::Encodable;
+    // let encoded_receipts: Vec<Vec<u8>> = receipts
+    //     .iter()
+    //     .map(|r| {
+    //         let mut buf = Vec::new();
+    //         r.encode(&mut buf);
+    //         buf
+    //     })
+    //     .collect();
+    //
+    // let root = ordered_trie_root::<KeccakHasher, _>(encoded_receipts.iter().map(|v| &v[..]));
+    //
+    // let receipts_bytes = encode(receipts);
+    // let receipts_hex = hex::encode(receipts_bytes);
+    let c_str = CString::new("aaa").unwrap();
+    // let ptr = c_str.into_raw();
+
+    let root: [u8;32] = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32];
+    (exec_result.gas_used, root, c_str.into_raw())
 }
 
 #[cfg(test)]

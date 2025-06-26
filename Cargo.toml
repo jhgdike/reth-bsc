@@ -102,6 +102,9 @@ prost = { version = "0.12.6" }
 
 tendermint = { git = "https://github.com/bnb-chain/tendermint-rs-parlia", rev = "8c21ccbd58a174e07eed2c9343e63ccd00f0fbd5", features = ["secp256k1"] }
 rand = "0.8.5"
+triehash = "0.8.4"
+keccak-hasher = "0.15.3"
+hex = "0.4"
 
 [target.'cfg(unix)'.dependencies]
 tikv-jemalloc-ctl = "0.6"

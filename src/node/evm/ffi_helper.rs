@@ -1,3 +1,4 @@
+use std::clone::Clone;
 use std::str::FromStr;
 use crate::{
     chainspec::{bsc, BscChainSpec},
@@ -13,32 +14,26 @@ use alloy_consensus::{EthereumTxEnvelope, Header, TxEip4844};
 use alloy_evm::block::BlockExecutor;
 use alloy_evm::{EvmFactory};
 use alloy_primitives::{Bytes};
-use alloy_rlp::{Decodable, encode};
+use alloy_rlp::Decodable;
 use reth::revm::db::StateBuilder;
 use reth_evm_ethereum::RethReceiptBuilder;
 use crate::node::evm::executor::BscBlockExecutor;
 use reth_primitives::TransactionSigned;
 use reth_primitives_traits::SignerRecoverable;
 use revm::Database;
-use triehash::ordered_trie_root;
-use keccak_hasher::KeccakHasher;
 use std::ffi::CString;
+use std::ops::Deref;
 use std::os::raw::c_char;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 use alloy_consensus::transaction::Recovered;
-use hex;
-use once_cell::unsync::Lazy;
+use once_cell::sync::Lazy;
 
 static CHAIN_SPEC: Lazy<Arc<BscChainSpec> >= Lazy::new(||Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() }));
-static EVM_CONFIG: BscEvmConfig = BscEvmConfig::bsc(CHAIN_SPEC);
-static RECEIPT_BUILDER: RethReceiptBuilder = RethReceiptBuilder::default();
+static EVM_CONFIG: Lazy<BscEvmConfig> = Lazy::new(||BscEvmConfig::bsc(CHAIN_SPEC.clone()));
+static RECEIPT_BUILDER: Lazy<RethReceiptBuilder> = Lazy::new(||RethReceiptBuilder::default());
 
 // 6. 创建系统合约
 // static SYSTEM_CONTRACTS: SystemContract<Arc<BscChainSpec>> = SystemContract::new(CHAIN_SPEC);
-
-struct ABC {
-
-}
 
 /// 创建BscBlockExecutor的完整示例
 pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
@@ -111,7 +106,7 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
         evm,
         ctx,
         CHAIN_SPEC.clone(),
-        RECEIPT_BUILDER,
+        RECEIPT_BUILDER.clone(),
         SystemContract::new(CHAIN_SPEC.clone()),
     );
 
@@ -125,13 +120,13 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
         // let syst = SystemTime::now();
         let result = executor.execute_transaction_with_result_closure(
             &recovered,
-            |result| {
+            |_| {
                 // println!("交易执行结果: {:?}", result);
                 // total_real += syst.elapsed().unwrap();
             },
         );
         match result {
-            Ok(gas_used) => {
+            Ok(_) => {
                 // println!("交易执行成功，消耗gas: {}", gas_used);
                 // total_gas += gas_used;
             },

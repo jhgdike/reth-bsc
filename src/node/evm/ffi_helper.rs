@@ -24,6 +24,7 @@ use revm::Database;
 use std::ffi::CString;
 use std::ops::Deref;
 use std::os::raw::c_char;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use alloy_consensus::transaction::Recovered;
 use once_cell::sync::Lazy;
@@ -31,6 +32,8 @@ use once_cell::sync::Lazy;
 static CHAIN_SPEC: Lazy<Arc<BscChainSpec> >= Lazy::new(||Arc::new(BscChainSpec { inner: bsc::bsc_mainnet() }));
 static EVM_CONFIG: Lazy<BscEvmConfig> = Lazy::new(||BscEvmConfig::bsc(CHAIN_SPEC.clone()));
 static RECEIPT_BUILDER: Lazy<RethReceiptBuilder> = Lazy::new(||RethReceiptBuilder::default());
+
+static TOTAL_ELAPSED_NS: AtomicU64 = AtomicU64::new(0);
 
 // 6. 创建系统合约
 // static SYSTEM_CONTRACTS: SystemContract<Arc<BscChainSpec>> = SystemContract::new(CHAIN_SPEC);
@@ -139,7 +142,8 @@ pub fn batch_run_txs<DB: Database<Error: Send + Sync + 'static>>(
     // Finish executor to get receipts and compute root
     let (_evm, exec_result) = executor.finish().expect("executor finish failed");
 
-    println!("whole batch_run_txs time: {:?}, txs time: {:?}", st.elapsed(), st_txs_time.elapsed());
+    TOTAL_ELAPSED_NS.fetch_add(st.elapsed().as_nanos() as u64, Ordering::Relaxed);
+    println!("whole batch_run_txs time: {:?}, txs time: {:?}, total: {:?}", st.elapsed(), st_txs_time.elapsed(), Duration::from_nanos(TOTAL_ELAPSED_NS.load(Ordering::Relaxed)));
     // let receipts = exec_result.receipts;
     //
     // // 为计算 root，单独编码每个 receipt

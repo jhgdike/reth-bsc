@@ -145,3 +145,19 @@ client = [
     "jsonrpsee/async-client",
     "reth-rpc-eth-api/client",
 ]
+
+[patch.crates-io]
+revm     = { path = "vendor/revm/crates/revm", version = "24.0.1" , features = ["secp256r1", "mechanism"]}
+op-revm  = { path = "vendor/revm/crates/op-revm", version = "5.0.1" }
+revm-primitives = { path = "vendor/revm/crates/primitives" }
+revm-bytecode = { path = "vendor/revm/crates/bytecode" }
+revm-database = { path = "vendor/revm/crates/database" }
+revm-database-interface = { path = "vendor/revm/crates/database/interface" }
+revm-state = { path = "vendor/revm/crates/state" }
+revm-interpreter = { path = "vendor/revm/crates/interpreter" }
+revm-precompile = { path = "vendor/revm/crates/precompile" }
+revm-context = { path = "vendor/revm/crates/context" }
+revm-context-interface = { path = "vendor/revm/crates/context/interface" }
+revm-handler = { path = "vendor/revm/crates/handler" }
+# alloy-trie = { version = "0.9.0", package = "alloy-trie" }     # 强制所有依赖用同一版本
+

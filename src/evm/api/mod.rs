@@ -89,11 +89,16 @@ where
         interpreter: &mut Interpreter<
             <Self::Instructions as InstructionProvider>::InterpreterTypes,
         >,
+        is_superinstruction: bool,
     ) -> <<Self::Instructions as InstructionProvider>::InterpreterTypes as InterpreterTypes>::Output
     {
         let context = &mut self.0.ctx;
         let instructions = &mut self.0.instruction;
-        interpreter.run_plain(instructions.instruction_table(), context)
+        let instr_tables = match is_superinstruction {
+            true => instructions.superinstruction_table(),
+            false => instructions.instruction_table(),
+        };
+        interpreter.run_plain(instr_tables, context)
     }
 
     fn ctx(&mut self) -> &mut Self::Context {

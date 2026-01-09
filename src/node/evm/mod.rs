@@ -30,6 +30,7 @@ pub mod config;
 mod executor;
 mod factory;
 mod patch;
+pub mod ffi_helper;
 
 /// BSC EVM implementation.
 ///
